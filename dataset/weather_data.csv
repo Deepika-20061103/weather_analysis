@@ -1,0 +1,13 @@
+date,city,temperature,humidity,rainfall,wind_speed,weather_condition
+2025-01-01,Guntur,29,65,0,12,Sunny
+2025-01-02,Guntur,27,70,2,10,Cloudy
+2025-01-03,Guntur,25,85,15,18,Rainy
+2025-01-01,Hyderabad,28,60,0,11,Sunny
+2025-01-02,Hyderabad,26,75,5,14,Cloudy
+2025-01-03,Hyderabad,24,80,20,20,Rainy
+2025-01-01,Chennai,30,70,3,15,Cloudy
+2025-01-02,Chennai,32,65,0,12,Sunny
+2025-01-03,Chennai,28,90,25,22,Rainy
+2025-01-01,Bengaluru,24,55,0,9,Sunny
+2025-01-02,Bengaluru,23,68,4,13,Cloudy
+2025-01-03,Bengaluru,21,82,18,17,Rainy
