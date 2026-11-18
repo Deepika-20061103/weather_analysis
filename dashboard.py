@@ -44,6 +44,8 @@ def load_weather_data():
     ssl_disabled=False
 )
 
+    cursor = connection.cursor(dictionary=True)
+
     try:
         query = """
             SELECT weather_date, city, temperature,
@@ -53,9 +55,15 @@ def load_weather_data():
             ORDER BY weather_date, city
         """
 
-        df = pd.read_sql(query, connection)
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        # Build the DataFrame directly from MySQL results.
+        # This avoids pandas' DBAPI connection compatibility warning.
+        df = pd.DataFrame(rows)
 
     finally:
+        cursor.close()
         connection.close()
 
     return df
@@ -233,7 +241,7 @@ st.write(f"Showing {len(filtered_df)} weather records.")
 
 st.dataframe(
     filtered_df,
-    use_container_width=True,
+    width="stretch",
     hide_index=True
 )
 
