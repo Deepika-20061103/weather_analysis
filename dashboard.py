@@ -19,312 +19,269 @@ st.set_page_config(
 
 st.title("🌦️ Weather Data Analysis Dashboard")
 
-st.markdown(
-    """
-    ### Weather Data Processing and Analysis Using MySQL
+st.markdown("""
+### Weather Data Processing and Analysis Using MySQL
 
-    This dashboard analyzes weather information
-    collected from different cities.
-    """
+This dashboard analyzes weather information
+collected from different cities.
+""")
+
+st.divider()
+
+# -----------------------------------
+# 3. CONNECT TO RAILWAY MYSQL
+# -----------------------------------
+
+@st.cache_data(ttl=300)
+def load_weather_data():
+
+    connection = mysql.connector.connect(
+    host=st.secrets["mysql"]["host"],
+    port=int(st.secrets["mysql"]["port"]),
+    user=st.secrets["mysql"]["user"],
+    password=st.secrets["mysql"]["password"],
+    database=st.secrets["mysql"]["database"],
+    ssl_disabled=False
+)
+
+    try:
+        query = """
+            SELECT weather_date, city, temperature,
+                   humidity, rainfall, wind_speed,
+                   weather_condition
+            FROM weather
+            ORDER BY weather_date, city
+        """
+
+        df = pd.read_sql(query, connection)
+
+    finally:
+        connection.close()
+
+    return df
+
+
+# -----------------------------------
+# 4. LOAD WEATHER DATA
+# -----------------------------------
+
+try:
+    with st.spinner("Connecting to Railway MySQL..."):
+        df = load_weather_data()
+
+    st.success("Connected to Railway MySQL successfully!")
+
+except Exception as error:
+    st.error("Unable to connect to the Railway database.")
+    st.info(
+        "Check your Streamlit Cloud Secrets settings "
+        "and Railway database credentials."
+    )
+    st.stop()
+
+if df.empty:
+    st.warning("No weather records found.")
+    st.stop()
+
+df["weather_date"] = pd.to_datetime(df["weather_date"])
+
+# -----------------------------------
+# 5. WEATHER OVERVIEW
+# -----------------------------------
+
+st.subheader("📊 Weather Overview")
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric("Total Records", len(df))
+
+col2.metric(
+    "Average Temperature",
+    f"{df['temperature'].mean():.2f} °C"
+)
+
+col3.metric(
+    "Maximum Temperature",
+    f"{df['temperature'].max():.1f} °C"
+)
+
+col4.metric(
+    "Total Rainfall",
+    f"{df['rainfall'].sum():.1f} mm"
 )
 
 st.divider()
 
 # -----------------------------------
-# 3. MYSQL CONNECTION
+# 6. CITY-WISE TEMPERATURE
 # -----------------------------------
 
-st.sidebar.header("🔌 MySQL Connection")
+st.subheader("🌡️ Average Temperature by City")
 
-db_user = st.sidebar.text_input(
-    "MySQL Username",
-    value="root"
+city_temp = (
+    df.groupby("city")["temperature"]
+    .mean()
+    .reset_index()
 )
 
-db_password = st.sidebar.text_input(
-    "MySQL Password",
-    type="password"
+st.bar_chart(city_temp, x="city", y="temperature")
+
+# -----------------------------------
+# 7. CITY-WISE RAINFALL
+# -----------------------------------
+
+st.subheader("🌧️ Average Rainfall by City")
+
+city_rain = (
+    df.groupby("city")["rainfall"]
+    .mean()
+    .reset_index()
 )
 
-if st.sidebar.button("Connect to MySQL"):
+st.bar_chart(city_rain, x="city", y="rainfall")
 
-    if not db_password:
-        st.sidebar.error("Please enter your password.")
-
-    else:
-        try:
-            connection = mysql.connector.connect(
-                host="localhost",
-                user=db_user,
-                password=db_password,
-                database="weather_db"
-            )
-
-            query = """
-                SELECT weather_date, city, temperature,
-                       humidity, rainfall, wind_speed,
-                       weather_condition
-                FROM weather
-                ORDER BY weather_date, city
-            """
-
-            df = pd.read_sql(query, connection)
-
-            connection.close()
-
-            st.session_state["weather_data"] = df
-
-            st.sidebar.success("MySQL Connected Successfully!")
-
-        except mysql.connector.Error as error:
-            st.sidebar.error(f"Connection failed: {error}")
+st.divider()
 
 # -----------------------------------
-# 4. DISPLAY DASHBOARD
+# 8. WEATHER CONDITION DISTRIBUTION
 # -----------------------------------
 
-if "weather_data" not in st.session_state:
+st.subheader("☁️ Weather Condition Distribution")
 
-    st.info(
-        "Enter your MySQL password in the sidebar "
-        "and click Connect to MySQL."
+condition_count = (
+    df["weather_condition"]
+    .value_counts()
+    .reset_index()
+)
+
+condition_count.columns = ["Weather Condition", "Days"]
+
+st.bar_chart(
+    condition_count,
+    x="Weather Condition",
+    y="Days"
+)
+
+st.divider()
+
+# -----------------------------------
+# 9. FILTER WEATHER RECORDS
+# -----------------------------------
+
+st.subheader("🔎 Explore Weather Records")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    selected_city = st.selectbox(
+        "Select City",
+        ["All"] + sorted(df["city"].dropna().unique().tolist())
     )
 
-else:
-
-    df = st.session_state["weather_data"].copy()
-
-    if df.empty:
-        st.warning("No weather records found.")
-        st.stop()
-
-    df["weather_date"] = pd.to_datetime(df["weather_date"])
-
-    # -----------------------------------
-    # 5. WEATHER OVERVIEW
-    # -----------------------------------
-
-    st.subheader("📊 Weather Overview")
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    col1.metric(
-        "Total Records",
-        len(df)
+with col2:
+    selected_condition = st.selectbox(
+        "Select Weather Condition",
+        ["All"] + sorted(
+            df["weather_condition"].dropna().unique().tolist()
+        )
     )
 
-    col2.metric(
-        "Average Temperature",
-        f"{df['temperature'].mean():.2f} °C"
-    )
+filtered_df = df.copy()
 
-    col3.metric(
-        "Maximum Temperature",
-        f"{df['temperature'].max():.1f} °C"
-    )
-
-    col4.metric(
-        "Total Rainfall",
-        f"{df['rainfall'].sum():.1f} mm"
-    )
-
-    st.divider()
-
-    # -----------------------------------
-    # 6. CITY-WISE TEMPERATURE
-    # -----------------------------------
-
-    st.subheader("🌡️ Average Temperature by City")
-
-    city_temp = (
-        df.groupby("city")["temperature"]
-        .mean()
-        .reset_index()
-    )
-
-    st.bar_chart(
-        city_temp,
-        x="city",
-        y="temperature"
-    )
-
-    # -----------------------------------
-    # 7. CITY-WISE RAINFALL
-    # -----------------------------------
-
-    st.subheader("🌧️ Average Rainfall by City")
-
-    city_rain = (
-        df.groupby("city")["rainfall"]
-        .mean()
-        .reset_index()
-    )
-
-    st.bar_chart(
-        city_rain,
-        x="city",
-        y="rainfall"
-    )
-
-    st.divider()
-
-    # -----------------------------------
-    # 8. WEATHER CONDITION DISTRIBUTION
-    # -----------------------------------
-
-    st.subheader("☁️ Weather Condition Distribution")
-
-    condition_count = (
-        df["weather_condition"]
-        .value_counts()
-        .reset_index()
-    )
-
-    condition_count.columns = [
-        "Weather Condition",
-        "Days"
+if selected_city != "All":
+    filtered_df = filtered_df[
+        filtered_df["city"] == selected_city
     ]
 
-    st.bar_chart(
-        condition_count,
-        x="Weather Condition",
-        y="Days"
-    )
+if selected_condition != "All":
+    filtered_df = filtered_df[
+        filtered_df["weather_condition"] == selected_condition
+    ]
 
-    st.divider()
+# -----------------------------------
+# 10. DATE RANGE FILTER
+# -----------------------------------
 
-    # -----------------------------------
-    # 9. FILTER WEATHER RECORDS
-    # -----------------------------------
+st.subheader("📅 Filter by Date")
 
-    st.subheader("🔎 Explore Weather Records")
+date_range = st.date_input(
+    "Select Date Range",
+    value=(
+        df["weather_date"].min().date(),
+        df["weather_date"].max().date()
+    ),
+    min_value=df["weather_date"].min().date(),
+    max_value=df["weather_date"].max().date()
+)
 
-    col1, col2 = st.columns(2)
+if len(date_range) == 2:
+    start_date, end_date = date_range
 
-    with col1:
-        selected_city = st.selectbox(
-            "Select City",
-            ["All"] + sorted(df["city"].unique().tolist())
-        )
+    filtered_df = filtered_df[
+        (filtered_df["weather_date"].dt.date >= start_date)
+        &
+        (filtered_df["weather_date"].dt.date <= end_date)
+    ]
 
-    with col2:
-        selected_condition = st.selectbox(
-            "Select Weather Condition",
-            ["All"] + sorted(
-                df["weather_condition"].dropna().unique().tolist()
-            )
-        )
+# -----------------------------------
+# 11. DISPLAY WEATHER RECORDS
+# -----------------------------------
 
-    filtered_df = df.copy()
+st.subheader("📋 Weather Records")
 
-    if selected_city != "All":
-        filtered_df = filtered_df[
-            filtered_df["city"] == selected_city
-        ]
+st.write(f"Showing {len(filtered_df)} weather records.")
 
-    if selected_condition != "All":
-        filtered_df = filtered_df[
-            filtered_df["weather_condition"] == selected_condition
-        ]
+st.dataframe(
+    filtered_df,
+    use_container_width=True,
+    hide_index=True
+)
 
-    # -----------------------------------
-    # 10. DATE RANGE FILTER
-    # -----------------------------------
+# -----------------------------------
+# 12. DOWNLOAD CSV
+# -----------------------------------
 
-    st.subheader("📅 Filter by Date")
+st.subheader("📥 Download Weather Data")
 
-    date_range = st.date_input(
-        "Select Date Range",
-        value=(
-            df["weather_date"].min().date(),
-            df["weather_date"].max().date()
-        ),
-        min_value=df["weather_date"].min().date(),
-        max_value=df["weather_date"].max().date()
-    )
+csv_data = filtered_df.to_csv(index=False).encode("utf-8")
 
-    if len(date_range) == 2:
+st.download_button(
+    label="Download Weather Data as CSV",
+    data=csv_data,
+    file_name="weather_analysis.csv",
+    mime="text/csv"
+)
 
-        start_date, end_date = date_range
+st.divider()
 
-        filtered_df = filtered_df[
-            (filtered_df["weather_date"].dt.date >= start_date)
-            &
-            (filtered_df["weather_date"].dt.date <= end_date)
-        ]
+# -----------------------------------
+# 13. AUTOMATIC WEATHER INSIGHTS
+# -----------------------------------
 
-    # -----------------------------------
-    # 11. DISPLAY FILTERED DATA
-    # -----------------------------------
+st.subheader("💡 Weather Insights")
 
-    st.subheader("📋 Weather Records")
+hottest_city = (
+    df.groupby("city")["temperature"]
+    .mean()
+    .idxmax()
+)
 
-    st.write(
-        f"Showing {len(filtered_df)} weather records."
-    )
+highest_rainfall_city = (
+    df.groupby("city")["rainfall"]
+    .sum()
+    .idxmax()
+)
 
-    st.dataframe(
-        filtered_df,
-        use_container_width=True,
-        hide_index=True
-    )
+rainy_days = (
+    df["weather_condition"]
+    .str.lower() == "rainy"
+).sum()
 
-    # -----------------------------------
-    # 12. DOWNLOAD CSV
-    # -----------------------------------
+st.write(f"🌡️ **Hottest city:** {hottest_city}")
+st.write(f"🌧️ **Highest total rainfall:** {highest_rainfall_city}")
+st.write(f"☔ **Total rainy records:** {rainy_days}")
 
-    st.subheader("📥 Download Weather Data")
-
-    csv_data = filtered_df.to_csv(
-        index=False
-    ).encode("utf-8")
-
-    st.download_button(
-        label="Download Weather Data as CSV",
-        data=csv_data,
-        file_name="weather_analysis.csv",
-        mime="text/csv"
-    )
-
-    st.divider()
-
-    # -----------------------------------
-    # 13. AUTOMATIC WEATHER INSIGHTS
-    # -----------------------------------
-
-    st.subheader("💡 Weather Insights")
-
-    hottest_city = (
-        df.groupby("city")["temperature"]
-        .mean()
-        .idxmax()
-    )
-
-    highest_rainfall_city = (
-        df.groupby("city")["rainfall"]
-        .sum()
-        .idxmax()
-    )
-
-    rainy_days = (
-        df["weather_condition"] == "Rainy"
-    ).sum()
-
-    st.write(
-        f"🌡️ **Hottest city:** {hottest_city}"
-    )
-
-    st.write(
-        f"🌧️ **Highest total rainfall:** {highest_rainfall_city}"
-    )
-
-    st.write(
-        f"☔ **Total rainy records:** {rainy_days}"
-    )
-
-    st.success(
-        "Weather data analysis completed successfully!"
-    )
+st.success("Weather data analysis completed successfully!")
 
 # -----------------------------------
 # 14. FOOTER
@@ -336,4 +293,3 @@ st.caption(
     "Weather Data Processing and Analysis Using MySQL | "
     "Developed using Python, Streamlit and MySQL"
 )
-
